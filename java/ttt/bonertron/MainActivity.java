@@ -14,28 +14,20 @@ import android.view.View;
 import android.view.View.OnTouchListener;
 import android.widget.Button;
 import android.os.SystemClock;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
-import java.lang.Math;
+public class MainActivity extends ActionBarActivity implements OnTouchListener
+{
 
-
-public class MainActivity extends ActionBarActivity implements OnTouchListener {
-
+    //Intent Extra Strings
     public final static String EXTRA_PITCH_STRING = "pString";
     public final static String EXTRA_BEND = "bend";
 
-    //                                          A B  C D E F G
-    public final static int[] RAW_NOTE_TABLE = {9,11,0,2,4,5,7};
-    public final static double C0 = 16.351597831287414667365624595207;
-
-    public final static int BUTTON_NONE = 0;
-    public final static int BUTTON_TAP = 1;
-    public final static int BUTTON_LFSR = 2;
-
+    //Numbers Of Things
     public final static int TAP_NUM = 12;
     public final static int LFSR_NUM = 3;
 
+    //Frequency Stuff
     public final static int Fs = 44100;
     public static float CLOCK_RATE = 2000.0f;
     public final static float AUDIO_SCALE = 10000.0f;
@@ -43,6 +35,11 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
     public static final float BEND_SCALE = 100.0f;
     public static String pitchString = "C8";
 
+    //                                          A B  C D E F G
+    public final static int[] RAW_NOTE_TABLE = {9, 11, 0, 2, 4, 5, 7};
+    public final static double C0 = 16.351597831287414667365624595207;
+
+    //IIR Filter Stuff
     public static final int IIR_LEN = 3;
     public static final float IIR_GAIN = 1;
     public static final float[] IIR_Cy= {0, 1.9959701796f, -0.9959782831f};
@@ -51,27 +48,35 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
     public static float[] IIR_y;
     public static int IIR_i;
 
+    //Audio Streaming Stuff
     public static long streamTime = 0;
     public static long updateTime;
     short samples[];
     int buffSize;
 
+    Thread t;
+    boolean isRunning = true;
+
+    //LFSR Stuff
     public static int[] taps;
     public static int[] lfsr;
     public static int[] lfsr_divs;
     public static int lfsr_sel;
 
+    //Buttons
     Button[] tap_buttons;
     Button[] lfsr_buttons;
     int[] tap_button_ids;
     int[] lfsr_button_ids;
 
+    public final static int BUTTON_NONE = 0;
+    public final static int BUTTON_TAP = 1;
+    public final static int BUTTON_LFSR = 2;
 
+    //Debug Text
     public static TextView debugText;
 
-    Thread t;
-    boolean isRunning = true;
-
+    //Computes one tick of LFSR given taps and value
     public int doLFSR(int taps, int lfsr)
     {
         int masked = taps&lfsr;
@@ -89,6 +94,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
         return lfsr;
     }
 
+    //Respond to touch events
     public boolean onTouch(View v, MotionEvent event)
     {
         int viewID;
@@ -133,6 +139,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
         return true;
     }
 
+    //Touch Down event
     public void touchDown(int t, int v)
     {
         updateTime = SystemClock.elapsedRealtime();
@@ -149,6 +156,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
         }
     }
 
+    //Touch Up event
     public void touchUp(int t, int v)
     {
         updateTime = SystemClock.elapsedRealtime();
@@ -160,6 +168,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
         }
     }
 
+    //Handle settings changes
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data)
     {
@@ -178,6 +187,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
 
     }
 
+    //Compute frequency from the current pitchString and BEND values
     double getFrequency()
     {
         int baseNote;
@@ -236,6 +246,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        //Initialize arrays
         taps = new int[LFSR_NUM];
         lfsr = new int[LFSR_NUM];
         lfsr_divs = new int[LFSR_NUM];
@@ -256,6 +267,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
 
         CLOCK_RATE = (float)getFrequency();
 
+        //Get Tap Buttons
         String button_id;
         String button_text;
         for(short i = 0; i < TAP_NUM; ++i)
@@ -272,6 +284,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
 
         }
 
+        //Get LFSR Buttons
         for(short i = 0; i < LFSR_NUM; ++i)
         {
             button_id = "button_lfsr_" + i;
@@ -287,17 +300,11 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
 
         }
 
+        //Get debug text box
         debugText = (TextView) findViewById(R.id.debugText);
         debugText.setText("");
 
-        SeekBar seek = (SeekBar) findViewById(R.id.bend_lfsr);
-
-        if(seek != null)
-        {
-            debugText.setText("Found SeekBar " + debugText.getText());
-        }
-
-
+        //Audio streaming thread
         t = new Thread()
         {
             public void run()
@@ -416,7 +423,8 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    public boolean onCreateOptionsMenu(Menu menu)
+    {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         return super.onCreateOptionsMenu(menu);
@@ -433,7 +441,8 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener {
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
