@@ -339,7 +339,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
                 int i_eff;
 
                 audioTrack.play();
-                nextClock = Fs/(CLOCK_RATE+BEND*BEND_SCALE);
+                nextClock = Fs/(CLOCK_RATE);
                 while(isRunning)
                 {
 
@@ -348,7 +348,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
                         //On clocks do LFSRS
                         if(i >= nextClock)
                         {
-                            nextClock += Fs/(CLOCK_RATE+BEND*BEND_SCALE);
+                            nextClock += Fs/(CLOCK_RATE);
                             for(short j = 0; j < LFSR_NUM; ++j)
                             {
                                 ++lfsr_divs[j];
@@ -391,7 +391,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
                     }
 
 
-                    nextClock -= (buffSize-1);
+                    nextClock -= buffSize;
                     //write buffer
                     audioTrack.write(samples, 0, buffSize);
                     streamTime = SystemClock.elapsedRealtime();
