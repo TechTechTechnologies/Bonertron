@@ -49,7 +49,8 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
     public static int IIR_i;
 
     //Audio Streaming Stuff
-    public static long streamTime = 0;
+    public static long streamTicks = 0;
+    public static long streamTime;  //In ms
     public static long updateTime;
     short samples[];
     int buffSize;
@@ -58,9 +59,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
     boolean isRunning = true;
 
     //LFSR Stuff
-    public static int[] taps;
-    public static int[] lfsr;
-    public static int[] lfsr_divs;
+    LFSR[] lfsrs;
     public static int lfsr_sel;
 
     //Buttons
@@ -151,7 +150,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         }
         else if(t == BUTTON_TAP)
         {
-            taps[lfsr_sel] |= (1 << v);
+            lfsrs[lfsr_sel].taps |= (1 << v);
             tap_buttons[v].setBackgroundColor(Color.DKGRAY);
         }
     }
@@ -162,7 +161,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         updateTime = SystemClock.elapsedRealtime();
         if(t == BUTTON_TAP)
         {
-            taps[lfsr_sel] &= ~(1 << v);
+            lfsrs[lfsr_sel].taps &= ~(1 << v);
             tap_buttons[v].setBackgroundColor(Color.LTGRAY);
 
         }
@@ -247,9 +246,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         setContentView(R.layout.activity_main);
 
         //Initialize arrays
-        taps = new int[LFSR_NUM];
-        lfsr = new int[LFSR_NUM];
-        lfsr_divs = new int[LFSR_NUM];
+        lfsrs = new LFSR[LFSR_NUM];
         lfsr_sel = 0;
 
         tap_buttons = new Button[TAP_NUM];
@@ -257,13 +254,6 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
 
         tap_button_ids = new int[TAP_NUM];
         lfsr_button_ids = new int[LFSR_NUM];
-
-        for(short i = 0; i < LFSR_NUM; ++i)
-        {
-            taps[i] = 0;
-            lfsr[i] = 0;
-            lfsr_divs[i] = 0;
-        }
 
         CLOCK_RATE = (float)getFrequency();
 
@@ -322,6 +312,14 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
 
                 samples = new short[buffSize];
 
+                String debugString = debugText.getText() + " " + buffSize;
+                debugText.setText(debugString);
+
+                for(short i = 0; i < LFSR_NUM; ++i)
+                {
+                    lfsrs[i] = new LFSR(Fs, (float)(CLOCK_RATE/Math.pow(2, i)) );
+                }
+
                 IIR_x = new float[IIR_LEN];
                 IIR_y = new float[IIR_LEN];
                 IIR_i = 0;
@@ -331,44 +329,38 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
                     IIR_y[i] = 0;
                 }
 
-                String debugString = debugText.getText() + " " + buffSize;
-                debugText.setText(debugString);
 
                 float nextClock;
                 float rawVal;
                 int i_eff;
 
                 audioTrack.play();
-                nextClock = Fs/(CLOCK_RATE);
+
                 while(isRunning)
                 {
 
+                    streamTime = SystemClock.elapsedRealtime();
+
+                    for(short i = 0; i < LFSR_NUM; ++i)
+                    {
+                        lfsrs[i].setTime(0);
+                    }
+
                     for(short i = 0; i < buffSize; ++i)
                     {
-                        //On clocks do LFSRS
-                        if(i >= nextClock)
-                        {
-                            nextClock += Fs/(CLOCK_RATE);
-                            for(short j = 0; j < LFSR_NUM; ++j)
-                            {
-                                ++lfsr_divs[j];
-                                if(lfsr_divs[j] >> j != 0)
-                                {
-                                    lfsr_divs[j] = 0;
-                                    lfsr[j] = doLFSR(taps[j], lfsr[j]);
-                                }
-                            }
-                        }
 
                         rawVal = 0;
                         //Compute buffer vals
-                        samples[i]= 0;
+
                         for(short j = 0; j < LFSR_NUM; ++j)
                         {
-                            rawVal+= lfsr[j]&1;
+                            //rawVal+= lfsr[j]&1;
+                            rawVal += lfsrs[j].tick();
                         }
                         rawVal -= LFSR_NUM/2;
                         rawVal *= AUDIO_SCALE/LFSR_NUM;
+
+                        //Do DSP's
 
                         IIR_x[IIR_i] = rawVal/IIR_GAIN;
                         IIR_y[IIR_i] = 0;
@@ -383,18 +375,18 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
                         }
 
                         samples[i] = (short)(IIR_y[IIR_i]);
-                        //samples[i] = (short)(IIR_x[IIR_i]);
 
                         ++IIR_i;
                         if(IIR_i == IIR_LEN) IIR_i=0;
 
                     }
-
-
-                    nextClock -= buffSize;
                     //write buffer
                     audioTrack.write(samples, 0, buffSize);
-                    streamTime = SystemClock.elapsedRealtime();
+                    for(short i = 0; i < LFSR_NUM; ++i)
+                    {
+                        lfsrs[i].setPhase(buffSize);
+                    }
+
                 }
 
                 audioTrack.stop();
@@ -403,7 +395,6 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
 
         };
 
-        streamTime = SystemClock.elapsedRealtime();
         t.start();
 
     }
