@@ -75,24 +75,6 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
     //Debug Text
     public static TextView debugText;
 
-    //Computes one tick of LFSR given taps and value
-    public int doLFSR(int taps, int lfsr)
-    {
-        int masked = taps&lfsr;
-        int feed = 1;
-        while(masked != 0)
-        {
-            feed += masked&1;
-            masked>>=1;
-        }
-        feed&=1;
-
-        lfsr<<=1;
-        lfsr|=feed;
-
-        return lfsr;
-    }
-
     //Respond to touch events
     public boolean onTouch(View v, MotionEvent event)
     {
@@ -151,6 +133,7 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         else if(t == BUTTON_TAP)
         {
             lfsrs[lfsr_sel].taps |= (1 << v);
+fillBufferFromTime(updateTime);
             tap_buttons[v].setBackgroundColor(Color.DKGRAY);
         }
     }
@@ -162,8 +145,8 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         if(t == BUTTON_TAP)
         {
             lfsrs[lfsr_sel].taps &= ~(1 << v);
+fillBufferFromTime(updateTime);
             tap_buttons[v].setBackgroundColor(Color.LTGRAY);
-
         }
     }
 
@@ -237,6 +220,55 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         basePitch = C0*java.lang.Math.pow(2.0f, exponent);
 
         return basePitch;
+    }
+
+    void fillBufferFromTime(long time)
+    {
+        int start = (int)((time-streamTime)*Fs/1000.0f);
+        float rawVal;
+        int i_eff;
+
+        for(short i = 0; i < LFSR_NUM; ++i)
+        {
+            lfsrs[i].setTime(start);
+        }
+
+        for(int i = start; i < buffSize; ++i)
+        {
+
+            rawVal = 0;
+            //Compute buffer vals
+
+            for(short j = 0; j < LFSR_NUM; ++j)
+            {
+                //rawVal+= lfsr[j]&1;
+                rawVal += lfsrs[j].tick();
+            }
+            rawVal -= LFSR_NUM/2;
+            rawVal *= AUDIO_SCALE/LFSR_NUM;
+
+            //Do DSP's
+
+            IIR_x[IIR_i] = rawVal/IIR_GAIN;
+            IIR_y[IIR_i] = 0;
+
+            for(int j = 0; j < IIR_LEN; ++j)
+            {
+                i_eff = IIR_i-j;
+                if(i_eff < 0) i_eff += IIR_LEN;
+
+                IIR_y[IIR_i] += IIR_y[i_eff]*IIR_Cy[j];
+                IIR_y[IIR_i] += IIR_x[i_eff]*IIR_Cx[j];
+            }
+
+            samples[i] = (short)(IIR_y[IIR_i]);
+
+            ++IIR_i;
+            if(IIR_i == IIR_LEN) IIR_i=0;
+
+        }
+
+
     }
 
     @Override
