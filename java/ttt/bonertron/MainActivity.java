@@ -133,7 +133,10 @@ public class MainActivity extends ActionBarActivity implements OnTouchListener
         else if(t == BUTTON_TAP)
         {
             lfsrs[lfsr_sel].taps |= (1 << v);
-fillBufferFromTime(updateTime);
+
+            BufferThread thread = new BufferThread(this, updateTime);
+            thread.start();
+
             tap_buttons[v].setBackgroundColor(Color.DKGRAY);
         }
     }
@@ -145,7 +148,10 @@ fillBufferFromTime(updateTime);
         if(t == BUTTON_TAP)
         {
             lfsrs[lfsr_sel].taps &= ~(1 << v);
-fillBufferFromTime(updateTime);
+
+            BufferThread thread = new BufferThread(this, updateTime);
+            thread.start();
+
             tap_buttons[v].setBackgroundColor(Color.LTGRAY);
         }
     }
@@ -224,6 +230,10 @@ fillBufferFromTime(updateTime);
 
     void fillBufferFromTime(long time)
     {
+        if(time < streamTime)
+        {
+            return;
+        }
         int start = (int)((time-streamTime)*Fs/1000.0f);
         float rawVal;
         int i_eff;
@@ -235,10 +245,9 @@ fillBufferFromTime(updateTime);
 
         for(int i = start; i < buffSize; ++i)
         {
-
             rawVal = 0;
-            //Compute buffer vals
 
+            //Compute buffer vals
             for(short j = 0; j < LFSR_NUM; ++j)
             {
                 //rawVal+= lfsr[j]&1;
@@ -249,23 +258,19 @@ fillBufferFromTime(updateTime);
 
             //Do DSP's
 
-            IIR_x[IIR_i] = rawVal/IIR_GAIN;
-            IIR_y[IIR_i] = 0;
+            IIR_x[i] = rawVal/IIR_GAIN;
+            IIR_y[i] = 0;
 
             for(int j = 0; j < IIR_LEN; ++j)
             {
-                i_eff = IIR_i-j;
-                if(i_eff < 0) i_eff += IIR_LEN;
+                i_eff = i-j;
+                if(i_eff < 0) i_eff += buffSize;
 
-                IIR_y[IIR_i] += IIR_y[i_eff]*IIR_Cy[j];
-                IIR_y[IIR_i] += IIR_x[i_eff]*IIR_Cx[j];
+                IIR_y[i] += IIR_y[i_eff]*IIR_Cy[j];
+                IIR_y[i] += IIR_x[i_eff]*IIR_Cx[j];
             }
 
-            samples[i] = (short)(IIR_y[IIR_i]);
-
-            ++IIR_i;
-            if(IIR_i == IIR_LEN) IIR_i=0;
-
+            samples[i] = (short)(IIR_y[i]);
         }
 
 
@@ -352,10 +357,10 @@ fillBufferFromTime(updateTime);
                     lfsrs[i] = new LFSR(Fs, (float)(CLOCK_RATE/Math.pow(2, i)) );
                 }
 
-                IIR_x = new float[IIR_LEN];
-                IIR_y = new float[IIR_LEN];
+                IIR_x = new float[buffSize];
+                IIR_y = new float[buffSize];
                 IIR_i = 0;
-                for(int i = 0; i < IIR_LEN; ++i)
+                for(int i = 0; i < buffSize; ++i)
                 {
                     IIR_x[i] = 0;
                     IIR_y[i] = 0;
@@ -373,45 +378,7 @@ fillBufferFromTime(updateTime);
 
                     streamTime = SystemClock.elapsedRealtime();
 
-                    for(short i = 0; i < LFSR_NUM; ++i)
-                    {
-                        lfsrs[i].setTime(0);
-                    }
-
-                    for(short i = 0; i < buffSize; ++i)
-                    {
-
-                        rawVal = 0;
-                        //Compute buffer vals
-
-                        for(short j = 0; j < LFSR_NUM; ++j)
-                        {
-                            //rawVal+= lfsr[j]&1;
-                            rawVal += lfsrs[j].tick();
-                        }
-                        rawVal -= LFSR_NUM/2;
-                        rawVal *= AUDIO_SCALE/LFSR_NUM;
-
-                        //Do DSP's
-
-                        IIR_x[IIR_i] = rawVal/IIR_GAIN;
-                        IIR_y[IIR_i] = 0;
-
-                        for(int j = 0; j < IIR_LEN; ++j)
-                        {
-                            i_eff = IIR_i-j;
-                            if(i_eff < 0) i_eff += IIR_LEN;
-
-                            IIR_y[IIR_i] += IIR_y[i_eff]*IIR_Cy[j];
-                            IIR_y[IIR_i] += IIR_x[i_eff]*IIR_Cx[j];
-                        }
-
-                        samples[i] = (short)(IIR_y[IIR_i]);
-
-                        ++IIR_i;
-                        if(IIR_i == IIR_LEN) IIR_i=0;
-
-                    }
+                    fillBufferFromTime(streamTime);
                     //write buffer
                     audioTrack.write(samples, 0, buffSize);
                     for(short i = 0; i < LFSR_NUM; ++i)
